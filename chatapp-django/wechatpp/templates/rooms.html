@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+
+{% block title %}Chat Rooms - Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    {% if user.is_authenticated %}
+        <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
+            <h5 class="mb-0">Available Public Rooms</h5>
+            <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-light">
+                    <i class="fas fa-sign-out-alt"></i> Log Out
+                </button>
+            </form>
+        </div>
+        
+        {% if rooms %}
+            <div class="row">
+                {% for room in rooms %}
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100">
+                        <div class="card-body d-flex flex-column">
+                            <h3 class="card-title">{{ room.name }}</h3>
+                            <p class="card-text text-muted">Public discussion group for this project</p>
+                            <div class="mt-auto">
+                                <a href="{% url 'room' room.slug %}" class="btn btn-primary">
+                                    <i class="fas fa-door-open"></i> Enter Room
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent">
+                            <small class="text-muted">
+                                {% if room.online_users.count %}
+                                    <i class="fas fa-user"></i> {{ room.online_users.count }} online
+                                {% else %}
+                                    <i class="fas fa-user-times"></i> 0 online
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-warning" role="alert">
+                <i class="fas fa-exclamation-circle"></i> No public rooms available yet.
+            </div>
+        {% endif %}
+
+    {% else %}
+        <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
+            <h5 class="mb-0">You are not logged in</h5>
+            <a href="{% url 'login' %}" class="btn btn-light">
+                <i class="fas fa-sign-in-alt"></i> Log In
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<style>
+    .card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border-radius: 10px;
+        overflow: hidden;
+    }
+    
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    
+    .card-title {
+        color: #2c3e50;
+        font-weight: 600;
+    }
+    
+    .card-footer {
+        border-top: none;
+    }
+</style>
+{% endblock %}

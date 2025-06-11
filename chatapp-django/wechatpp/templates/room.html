@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+
+{% block title %}Home - {{ room_name }}{% endblock %}
+
+{% block content %}
+{% if user.is_authenticated %}
+<div class="container">
+    <div class="row d-flex justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
+                <h5 class="mb-0">Room: {{ room_name }}</h5>
+                <a href="{% url 'logout' %}" class="btn btn-light">Log Out</a>
+            </div>
+            
+            <div class="chat-container mb-3">
+                <div class="chat-messages" id="chatbox">
+                    {% if messages %}
+                        {% for message in messages %}
+                        <div class="chat-message {% if message.user == request.user %}message-sent{% else %}message-received{% endif %}">
+                            <span class="message-sender">{{ message.user.username }}</span>
+                            <span class="message-content">{{ message.content }}</span>
+                            <span class="message-time">{{ message.timestamp|time }}</span>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-messages text-muted text-center py-3">
+                            No messages in this room yet. Start the conversation!
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <form id="chat-form" class="message-form">
+                <div class="input-group">
+                    <input type="text" class="form-control" placeholder="Type your message here..." 
+                           id="message-input" required aria-label="Message input">
+                    <div class="input-group-append">
+                        <button class="btn btn-primary" type="submit" id="send-button">
+                            <i class="fas fa-paper-plane"></i> Send
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{ slug|json_script:"room_slug" }}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chatbox = document.getElementById('chatbox');
+    const messageForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const roomName = JSON.parse(document.getElementById('room_slug').textContent);
+    
+    // Scroll to bottom of chat
+    function scrollToBottom() {
+        chatbox.scrollTop = chatbox.scrollHeight;
+    }
+    
+    // Create a new message element
+    function createMessageElement(username, message, isCurrentUser) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${isCurrentUser ? 'message-sent' : 'message-received'}`;
+        
+        const now = new Date();
+        const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        messageDiv.innerHTML = `
+            <span class="message-sender">${username}</span>
+            <span class="message-content">${message}</span>
+            <span class="message-time">${timeString}</span>
+        `;
+        
+        return messageDiv;
+    }
+    
+    // Initialize WebSocket connection
+    const chatSocket = new WebSocket(
+        'ws://' + window.location.host + '/ws/' + roomName + '/'
+    );
+    
+    // WebSocket event handlers
+    chatSocket.onopen = function(e) {
+        console.log('WebSocket connection established successfully');
+        messageInput.focus();
+    };
+    
+    chatSocket.onclose = function(e) {
+        console.error('WebSocket connection closed unexpectedly');
+        // Optionally implement reconnection logic here
+    };
+    
+    chatSocket.onerror = function(e) {
+        console.error('WebSocket error:', e);
+    };
+    
+    chatSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        const isCurrentUser = data.username === "{{ request.user.username }}";
+        const messageElement = createMessageElement(data.username, data.message, isCurrentUser);
+        
+        // Remove "no messages" placeholder if it exists
+        const noMessages = document.querySelector('.no-messages');
+        if (noMessages) noMessages.remove();
+        
+        chatbox.appendChild(messageElement);
+        scrollToBottom();
+    };
+    
+    // Form submission handler
+    messageForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        sendMessage();
+    });
+    
+    // Send button click handler
+    sendButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        sendMessage();
+    });
+    
+    // Enter key handler
+    messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    // Function to send message
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        
+        if (message.length === 0) {
+            alert('Please enter a message before sending');
+            return;
+        }
+        
+        chatSocket.send(JSON.stringify({
+            message: message,
+            username: "{{ request.user.username }}",
+            room_name: "{{ room_name }}"
+        }));
+        
+        messageInput.value = '';
+        messageInput.focus();
+    }
+    
+    // Initial scroll to bottom
+    scrollToBottom();
+});
+</script>
+
+<style>
+.chat-container {
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    background-color: #f8f9fa;
+    height: 300px;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.chat-message {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-radius: 1rem;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.message-sent {
+    background-color: #007bff;
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.message-received {
+    background-color: #e9ecef;
+    color: #212529;
+    margin-right: auto;
+    border-bottom-left-radius: 0.25rem;
+}
+
+.message-sender {
+    font-weight: bold;
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.message-time {
+    display: block;
+    font-size: 0.75rem;
+    text-align: right;
+    margin-top: 0.25rem;
+    opacity: 0.7;
+}
+
+.no-messages {
+    font-style: italic;
+}
+
+.message-form {
+    margin-top: 1rem;
+}
+</style>
+
+{% else %}
+<div class="container">
+    <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
+        <h5 class="mb-0">You are not logged in</h5>
+        <a href="{% url 'login' %}" class="btn btn-light">Log In</a>
+    </div>
+</div>  
+{% endif %}
+{% endblock %}
