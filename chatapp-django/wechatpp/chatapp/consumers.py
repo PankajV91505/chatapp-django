@@ -86,9 +86,17 @@ class InboxConsumer(AsyncWebsocketConsumer):
 
     async def inbox_message(self, event):
         await self.send(text_data=json.dumps({
+            "type": "message",
             "message": event["message"],
             "username": event["username"],
             "room_name": event["room_name"],
             "room_slug": event["room_slug"],
             "created_on": event["created_on"],
+        }))
+
+    async def inbox_room(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "room",
+            "room_name": event["room_name"],
+            "room_slug": event["room_slug"],
         }))
