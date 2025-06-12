@@ -3,19 +3,14 @@
 {% block title %}Login{% endblock %}
 
 {% block content %}
-
-
-  <div class="container">
+<div class="container">
     <h5 class="alert alert-info">Log In</h5>
-    <div class="btn btn-light d-flex justify-content-between" style="padding: 34px 30%;">
-        
-        <form method="post">
-          {% csrf_token %}
-          {{ form.as_p }}
-          <button type="submit" class="btn btn-primary btn-lg btn-block">Log In</button>
+    <div class="d-flex justify-content-center">
+        <form method="post" style="width: 100%; max-width: 400px; padding: 20px;">
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" class="btn btn-primary btn-block">Log In</button>
         </form>
-      </div>
-</div>  
-
-
+    </div>
+</div>
 {% endblock %}

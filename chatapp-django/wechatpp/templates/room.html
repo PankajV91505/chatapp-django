@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Home - {{ room_name }}{% endblock %}
 
@@ -9,7 +10,10 @@
         <div class="col-12 col-md-8 col-lg-6">
             <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
                 <h5 class="mb-0">Room: {{ room_name }}</h5>
-                <a href="{% url 'logout' %}" class="btn btn-light">Log Out</a>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-light">Log Out</button>
+                </form>
             </div>
             
             <div class="chat-container mb-3">
@@ -19,7 +23,7 @@
                         <div class="chat-message {% if message.user == request.user %}message-sent{% else %}message-received{% endif %}">
                             <span class="message-sender">{{ message.user.username }}</span>
                             <span class="message-content">{{ message.content }}</span>
-                            <span class="message-time">{{ message.timestamp|time }}</span>
+                            <span class="message-time">{{ message.created_on|time:"H:i" }}</span>
                         </div>
                         {% endfor %}
                     {% else %}
@@ -55,18 +59,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const sendButton = document.getElementById('send-button');
     const roomName = JSON.parse(document.getElementById('room_slug').textContent);
     
-    // Scroll to bottom of chat
     function scrollToBottom() {
         chatbox.scrollTop = chatbox.scrollHeight;
     }
     
-    // Create a new message element
-    function createMessageElement(username, message, isCurrentUser) {
+    function createMessageElement(username, message, isCurrentUser, createdOn) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${isCurrentUser ? 'message-sent' : 'message-received'}`;
         
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const timeString = new Date(createdOn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         
         messageDiv.innerHTML = `
             <span class="message-sender">${username}</span>
@@ -77,12 +78,10 @@ document.addEventListener('DOMContentLoaded', function() {
         return messageDiv;
     }
     
-    // Initialize WebSocket connection
     const chatSocket = new WebSocket(
         'ws://' + window.location.host + '/ws/' + roomName + '/'
     );
     
-    // WebSocket event handlers
     chatSocket.onopen = function(e) {
         console.log('WebSocket connection established successfully');
         messageInput.focus();
@@ -90,7 +89,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
     chatSocket.onclose = function(e) {
         console.error('WebSocket connection closed unexpectedly');
-        // Optionally implement reconnection logic here
     };
     
     chatSocket.onerror = function(e) {
@@ -100,9 +98,8 @@ document.addEventListener('DOMContentLoaded', function() {
     chatSocket.onmessage = function(e) {
         const data = JSON.parse(e.data);
         const isCurrentUser = data.username === "{{ request.user.username }}";
-        const messageElement = createMessageElement(data.username, data.message, isCurrentUser);
+        const messageElement = createMessageElement(data.username, data.message, isCurrentUser, data.created_on);
         
-        // Remove "no messages" placeholder if it exists
         const noMessages = document.querySelector('.no-messages');
         if (noMessages) noMessages.remove();
         
@@ -110,19 +107,16 @@ document.addEventListener('DOMContentLoaded', function() {
         scrollToBottom();
     };
     
-    // Form submission handler
     messageForm.addEventListener('submit', function(e) {
         e.preventDefault();
         sendMessage();
     });
     
-    // Send button click handler
     sendButton.addEventListener('click', function(e) {
         e.preventDefault();
         sendMessage();
     });
     
-    // Enter key handler
     messageInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -130,7 +124,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Function to send message
     function sendMessage() {
         const message = messageInput.value.trim();
         
@@ -149,7 +142,6 @@ document.addEventListener('DOMContentLoaded', function() {
         messageInput.focus();
     }
     
-    // Initial scroll to bottom
     scrollToBottom();
 });
 </script>
@@ -209,7 +201,6 @@ document.addEventListener('DOMContentLoaded', function() {
     margin-top: 1rem;
 }
 </style>
-
 {% else %}
 <div class="container">
     <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
