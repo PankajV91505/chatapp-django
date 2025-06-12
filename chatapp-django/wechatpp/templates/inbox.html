@@ -42,7 +42,7 @@
                             {% endif %}
                         </div>
                         {% if data.latest_message %}
-                        <span class="badge bg-success rounded-pill whatsapp-unread">2</span>
+                        {% comment %} <span class="badge bg-success rounded-pill whatsapp-unread">!</span> {% endcomment %}
                         {% endif %}
                     </a>
                 </li>
@@ -58,7 +58,13 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const inboxList = document.getElementById('inbox-list');
+    const inboxList = document.getElementById('inbox-list') || document.createElement('ul');
+    if (!inboxList.id) {
+        inboxList.id = 'inbox-list';
+        inboxList.className = 'list-group list-group-flush';
+        document.querySelector('.inbox-container').appendChild(inboxList);
+    }
+
     const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const inboxSocket = new WebSocket(wsProtocol + window.location.host + '/ws/inbox/');
 
@@ -69,37 +75,61 @@ document.addEventListener('DOMContentLoaded', function() {
     inboxSocket.onmessage = function(e) {
         const data = JSON.parse(e.data);
         const roomSlug = data.room_slug;
-        const existingItem = document.querySelector(`li[data-room-slug="${roomSlug}"]`);
 
-        if (existingItem) {
-            inboxList.removeChild(existingItem);
-        }
+        if (data.type === 'message') {
+            const existingItem = document.querySelector(`li[data-room-slug="${roomSlug}"]`);
+            if (existingItem) {
+                inboxList.removeChild(existingItem);
+            }
 
-        const newItem = document.createElement('li');
-        newItem.className = 'list-group-item whatsapp-chat-item';
-        newItem.dataset.roomSlug = roomSlug;
+            const newItem = document.createElement('li');
+            newItem.className = 'list-group-item whatsapp-chat-item';
+            newItem.dataset.roomSlug = roomSlug;
 
-        const createdOn = new Date(data.created_on);
-        const timeString = createdOn.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+            const createdOn = new Date(data.created_on);
+            const timeString = createdOn.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 
-        newItem.innerHTML = `
-            <a href="/${roomSlug}" class="d-flex align-items-center text-decoration-none text-dark">
-                <img src="{% static 'images/default_avatar.png' %}" alt="Avatar" class="whatsapp-avatar me-3">
-                <div class="flex-grow-1">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">${data.room_name}</h6>
-                        <small class="text-muted">${timeString}</small>
+            newItem.innerHTML = `
+                <a href="/${roomSlug}" class="d-flex align-items-center text-decoration-none text-dark">
+                    <img src="{% static 'images/default_avatar.png' %}" alt="Avatar" class="whatsapp-avatar me-3">
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">${data.room_name}</h6>
+                            <small class="text-muted">${timeString}</small>
+                        </div>
+                        <p class="mb-0 text-muted whatsapp-message-preview">
+                            <span class="whatsapp-sender">${data.username}:</span>
+                            ${data.message.substring(0, 40)}${data.message.length > 40 ? '...' : ''}
+                        </p>
                     </div>
-                    <p class="mb-0 text-muted whatsapp-message-preview">
-                        <span class="whatsapp-sender">${data.username}:</span>
-                        ${data.message.substring(0, 40)}${data.message.length > 40 ? '...' : ''}
-                    </p>
-                </div>
-                <span class="badge bg-success rounded-pill whatsapp-unread">1</span>
-            </a>
-        `;
+                    <span class="badge bg-success rounded-pill whatsapp-unread">1</span>
+                </a>
+            `;
 
-        inboxList.insertBefore(newItem, inboxList.firstChild);
+            inboxList.insertBefore(newItem, inboxList.firstChild);
+        } else if (data.type === 'room') {
+            const existingItem = document.querySelector(`li[data-room-slug="${roomSlug}"]`);
+            if (!existingItem) {
+                const newItem = document.createElement('li');
+                newItem.className = 'list-group-item whatsapp-chat-item';
+                newItem.dataset.roomSlug = roomSlug;
+
+                newItem.innerHTML = `
+                    <a href="/${roomSlug}" class="d-flex align-items-center text-decoration-none text-dark">
+                        <img src="{% static 'images/default_avatar.png' %}" alt="Avatar" class="whatsapp-avatar me-3">
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">${data.room_name}</h6>
+                                <small class="text-muted"></small>
+                            </div>
+                            <p class="mb-0 text-muted whatsapp-message-preview">No messages yet.</p>
+                        </div>
+                    </a>
+                `;
+
+                inboxList.insertBefore(newItem, inboxList.firstChild);
+            }
+        }
     };
 
     inboxSocket.onclose = function(e) {
