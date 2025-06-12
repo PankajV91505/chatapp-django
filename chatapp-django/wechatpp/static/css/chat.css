@@ -1,0 +1,105 @@
+.chat-container {
+    height: 100vh;
+    padding: 0;
+}
+
+.sidebar {
+    background-color: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.sidebar-header {
+    background-color: #e9ecef;
+    padding: 15px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.sidebar-header h5 {
+    font-size: 1.25rem;
+    font-weight: 500;
+}
+
+.room-list {
+    padding: 10px;
+}
+
+.room-item {
+    padding: 10px 15px;
+    border-bottom: 1px solid #e0e0e0;
+    transition: background-color 0.2s;
+}
+
+.room-item:hover {
+    background-color: #e9ecef;
+}
+
+.room-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.message-preview {
+    font-size: 0.9rem;
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.message-sender {
+    font-weight: 500;
+    color: #333;
+}
+
+.unread-count {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    margin-left: 10px;
+}
+
+.list-group-item h6 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #111;
+}
+
+.list-group-item small {
+    font-size: 0.75rem;
+    color: #999;
+}
+
+.main-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background-color: #fff;
+}
+
+.welcome-message {
+    text-align: center;
+    color: #666;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        height: auto;
+        max-height: 50vh;
+    }
+
+    .main-content {
+        height: auto;
+        padding: 20px;
+    }
+
+    .room-avatar {
+        width: 35px;
+        height: 35px;
+    }
+}
