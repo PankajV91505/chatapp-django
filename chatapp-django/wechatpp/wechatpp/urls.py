@@ -16,9 +16,12 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from chatapp import routing
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("accounts/", include("django.contrib.auth.urls")),
     path('', include('chatapp.urls')),
+    path('accounts/', include('django.contrib.auth.urls')),
 ]
+
+websocket_urlpatterns = routing.websocket_urlpatterns

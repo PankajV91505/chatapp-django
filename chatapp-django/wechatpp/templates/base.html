@@ -18,8 +18,7 @@
             <span class="navbar-brand">Hi {{ user.username|default:"Guest" }}, Welcome to Chatapp</span>
             {% if user.is_authenticated %}
             <div class="navbar-nav d-flex flex-row">
-                <a class="nav-link mx-2" href="{% url 'inbox' %}">Inbox</a>
-                <a class="nav-link mx-2" href="{% url 'rooms' %}">Rooms</a>
+                <a class="nav-link mx-2" href="{% url 'chatbox' %}">Chatbox</a>
             </div>
             {% endif %}
         </nav>

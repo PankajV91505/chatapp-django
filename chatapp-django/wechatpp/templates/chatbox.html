@@ -1,0 +1,521 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chatbox{% endblock %}
+
+{% block content %}
+{% if user.is_authenticated %}
+<div class="container-fluid chat-container">
+    <div class="row">
+        <!-- Left Sidebar: Room List -->
+        <div class="col-md-4 col-lg-3 sidebar">
+            <div class="sidebar-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Classrooms</h5>
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-link text-muted" title="Log Out">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </form>
+            </div>
+            <!-- Room Creation Form -->
+            <div class="room-creation-form p-3">
+                <form method="post" id="add-room-form">
+                    {% csrf_token %}
+                    <div class="input-group">
+                        <input type="text" name="room_name" class="form-control" placeholder="New classroom name" required>
+                        <button type="submit" class="btn btn-primary">Add</button>
+                    </div>
+                </form>
+            </div>
+            <!-- Room List -->
+            <div class="room-list">
+                {% if room_data %}
+                    <ul class="list-group list-group-flush" id="room-list">
+                        {% for data in room_data %}
+                        <li class="list-group-item room-item" data-room-slug="{{ data.room.slug }}">
+                            <a href="#" class="d-flex align-items-center text-decoration-none text-dark room-link" data-room-slug="{{ data.room.slug }}" data-room-name="{{ data.room.name }}">
+                                <img src="{% static 'images/default_avatar.png' %}" alt="Avatar" class="room-avatar me-3">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">{{ data.room.name }}</h6>
+                                        <small class="text-muted">
+                                            {% if data.latest_message %}
+                                                {{ data.latest_message.created_on|date:"H:i" }}
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                    {% if data.latest_message %}
+                                    <p class="mb-0 text-muted message-preview">
+                                        <span class="message-sender">{{ data.latest_message.user.username }}:</span>
+                                        {{ data.latest_message.content|truncatechars:40 }}
+                                    </p>
+                                    {% else %}
+                                    <p class="mb-0 text-muted message-preview">No messages yet.</p>
+                                    {% endif %}
+                                </div>
+                                {% if data.latest_message %}
+                                {% comment %} <span class="badge bg-primary rounded-pill unread-count">2</span> {% endcomment %}
+                                {% endif %}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="alert alert-warning text-center">
+                        <i class="fas fa-exclamation-circle"></i> No classrooms found. Create one to start chatting!
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right Section: Chatbox -->
+        <div class="col-md-8 col-lg-9 main-content">
+            <div class="chat-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0" id="chat-room-name">Select a Classroom</h5>
+                <button id="delete-chat-button" class="btn btn-danger btn-sm" style="display: none;" title="Delete Chat">
+                    <i class="fas fa-trash"></i> Delete Chat
+                </button>
+            </div>
+            <div class="chat-messages" id="chatbox">
+                <div class="welcome-message text-center">
+                    <h4>Welcome to Your Chatbox</h4>
+                    <p>Select a classroom from the left to start messaging.</p>
+                </div>
+            </div>
+            <div id="typing-indicator" class="typing-indicator" style="display: none; padding: 0.5rem 1rem; color: #666; font-style: italic;"></div>
+            <form id="chat-form" class="message-form" style="display: none;">
+                <div class="input-group">
+                    <span class="emoji-icon"><i class="fas fa-smile"></i></span>
+                    <span class="attachment-icon"><i class="fas fa-paperclip"></i></span>
+                    <input type="text" class="form-control" placeholder="Type a message" 
+                           id="message-input" required aria-label="Message input">
+                    <div class="input-group-append">
+                        <button class="btn btn-primary" type="submit" id="send-button">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let currentRoomSlug = null;
+    let chatSocket = null;
+    const roomList = document.getElementById('room-list') || document.createElement('ul');
+    const chatbox = document.getElementById('chatbox');
+    const messageForm = document.getElementById('chat-form');
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-button');
+    const chatRoomName = document.getElementById('chat-room-name');
+    const addRoomForm = document.getElementById('add-room-form');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const deleteChatButton = document.getElementById('delete-chat-button');
+    let typingTimeout = null;
+
+    if (!roomList.id) {
+        roomList.id = 'room-list';
+        roomList.className = 'list-group list-group-flush';
+        document.querySelector('.room-list').appendChild(roomList);
+    }
+
+    // WebSocket for room list updates
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const roomSocket = new WebSocket(wsProtocol + window.location.host + '/ws/chatbox/');
+
+    roomSocket.onopen = function(e) {
+        console.log('Room WebSocket connection established');
+    };
+
+    roomSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        const roomSlug = data.room_slug;
+
+        console.log('WebSocket message received:', data);
+
+        if (data.type === 'message') {
+            const existingItem = document.querySelector(`li[data-room-slug="${roomSlug}"]`);
+            if (existingItem) {
+                roomList.removeChild(existingItem);
+            }
+
+            const newItem = document.createElement('li');
+            newItem.className = 'list-group-item room-item';
+            newItem.dataset.roomSlug = roomSlug;
+
+            const createdOn = new Date(data.created_on);
+            const timeString = createdOn.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+            newItem.innerHTML = `
+                <a href="#" class="d-flex align-items-center text-decoration-none text-dark room-link" data-room-slug="${roomSlug}" data-room-name="${data.room_name}">
+                    <img src="{% static 'images/default_avatar.png' %}" alt="Avatar" class="room-avatar me-3">
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">${data.room_name}</h6>
+                            <small class="text-muted">${timeString}</small>
+                        </div>
+                        <p class="mb-0 text-muted message-preview">
+                            <span class="message-sender">${data.username}:</span>
+                            ${data.message.substring(0, 40)}${data.message.length > 40 ? '...' : ''}
+                        </p>
+                    </div>
+                    {% comment %} <span class="badge bg-primary rounded-pill unread-count">1</span> {% endcomment %}
+                </a>
+            `;
+
+            roomList.insertBefore(newItem, roomList.firstChild);
+
+            // If the message is for the current room, display it
+            if (currentRoomSlug === roomSlug) {
+                const isCurrentUser = data.username === "{{ request.user.username }}";
+                const messageElement = createMessageElement(
+                    data.username,
+                    data.message,
+                    isCurrentUser,
+                    data.created_on,
+                    'delivered',
+                    []
+                );
+                const noMessages = document.querySelector('.no-messages');
+                if (noMessages) noMessages.remove();
+                chatbox.appendChild(messageElement);
+                scrollToBottom();
+            }
+
+            // Reattach event listeners to new room links
+            attachRoomLinkListeners();
+        } else if (data.type === 'chatbox_room') {
+            console.log('Adding new room to list:', data.room_name);
+            const existingItem = document.querySelector(`li[data-room-slug="${roomSlug}"]`);
+            if (!existingItem) {
+                const newItem = document.createElement('li');
+                newItem.className = 'list-group-item room-item';
+                newItem.dataset.roomSlug = roomSlug;
+
+                newItem.innerHTML = `
+                    <a href="#" class="d-flex align-items-center text-decoration-none text-dark room-link" data-room-slug="${roomSlug}" data-room-name="${data.room_name}">
+                        <img src="{% static 'images/default_avatar.png' %}" alt="Avatar" class="room-avatar me-3">
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">${data.room_name}</h6>
+                                <small class="text-muted"></small>
+                            </div>
+                            <p class="mb-0 text-muted message-preview">No messages yet.</p>
+                        </div>
+                    </a>
+                `;
+
+                roomList.insertBefore(newItem, roomList.firstChild);
+
+                // Reattach event listeners to new room links
+                attachRoomLinkListeners();
+            }
+        }
+    };
+
+    roomSocket.onclose = function(e) {
+        console.error('Room WebSocket closed unexpectedly');
+    };
+
+    roomSocket.onerror = function(e) {
+        console.error('Room WebSocket error:', e);
+    };
+
+    // Add room form submission handler
+    addRoomForm.addEventListener('submit', function(e) {
+        console.log('Add room form submitted');
+        const roomNameInput = addRoomForm.querySelector('input[name="room_name"]');
+        if (!roomNameInput.value.trim()) {
+            e.preventDefault();
+            alert('Please enter a classroom name');
+        }
+    });
+
+    // Function to load messages for a room
+    async function loadMessages(roomSlug) {
+        try {
+            console.log('Fetching messages for room:', roomSlug);
+            const response = await fetch(`/api/messages/${roomSlug}/`);
+            console.log('API response status:', response.status);
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.log('API error response:', errorData);
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            const messages = await response.json();
+            console.log('Fetched messages:', messages);
+
+            // Clear chatbox only if fetch is successful
+            chatbox.innerHTML = '';
+            if (messages.length === 0) {
+                chatbox.innerHTML = '<div class="no-messages text-muted text-center py-3">No messages in this room yet. Start the conversation!</div>';
+            } else {
+                messages.forEach(message => {
+                    const isCurrentUser = message.user === "{{ request.user.username }}";
+                    const messageElement = createMessageElement(
+                        message.user,
+                        message.content,
+                        isCurrentUser,
+                        message.created_on,
+                        message.status,
+                        message.read_by
+                    );
+                    chatbox.appendChild(messageElement);
+                });
+            }
+            scrollToBottom();
+        } catch (error) {
+            console.error('Error loading messages:', error);
+            // Don't clear chatbox on error to preserve existing messages
+            if (!chatbox.innerHTML) {
+                chatbox.innerHTML = '<div class="alert alert-danger text-center">Error loading messages. Please try again later.</div>';
+            }
+        }
+    }
+
+    // Function to delete messages for the current room
+    async function deleteMessages(roomSlug) {
+        if (!confirm('Are you sure you want to delete all messages in this room?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/delete-messages/${roomSlug}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+            });
+            const data = await response.json();
+            if (data.status === 'success') {
+                chatbox.innerHTML = '<div class="no-messages text-muted text-center py-3">No messages in this room yet. Start the conversation!</div>';
+                alert('Messages deleted successfully.');
+            } else {
+                alert('Error deleting messages: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error deleting messages:', error);
+            alert('Error deleting messages. Please try again.');
+        }
+    }
+
+    // Function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Function to create message element
+    function createMessageElement(username, message, isCurrentUser, createdOn, status, readBy) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${isCurrentUser ? 'message-sent' : 'message-received'}`;
+        messageDiv.dataset.username = username;
+        messageDiv.dataset.createdOn = createdOn;
+        
+        const timeString = new Date(createdOn).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        
+        // Preserve line breaks in the message content
+        const formattedMessage = message.replace(/\n/g, '<br>');
+
+        // Determine read receipt ticks
+        let ticks = '';
+        if (isCurrentUser) {
+            if (status === 'sent') {
+                ticks = '<i class="fas fa-check read-tick"></i>';
+            } else if (status === 'delivered') {
+                ticks = '<i class="fas fa-check-double read-tick"></i>';
+            } else if (status === 'read') {
+                ticks = '<i class="fas fa-check-double read-tick read-tick-blue"></i>';
+            }
+        }
+
+        messageDiv.innerHTML = `
+            <span class="message-sender">${username}</span>
+            <span class="message-content">${formattedMessage}</span>
+            <span class="message-time">${timeString} ${ticks}</span>
+        `;
+        
+        return messageDiv;
+    }
+
+    // Function to scroll chatbox to bottom
+    function scrollToBottom() {
+        chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    // Function to connect to room WebSocket
+    function connectToRoom(roomSlug, roomName) {
+        // Close existing WebSocket connection if it exists
+        if (chatSocket) {
+            chatSocket.close();
+            chatSocket = null;
+        }
+
+        chatSocket = new WebSocket(wsProtocol + window.location.host + '/ws/room/' + roomSlug + '/');
+
+        chatSocket.onopen = function(e) {
+            console.log('Chat WebSocket connection established for room:', roomSlug);
+            messageInput.focus();
+        };
+
+        chatSocket.onmessage = function(e) {
+            console.log('Chat WebSocket message received:', e.data);
+            const data = JSON.parse(e.data);
+
+            if (data.type === 'message') {
+                const isCurrentUser = data.username === "{{ request.user.username }}";
+                const messageElement = createMessageElement(
+                    data.username,
+                    data.message,
+                    isCurrentUser,
+                    data.created_on,
+                    data.status,
+                    []
+                );
+                
+                const noMessages = document.querySelector('.no-messages');
+                if (noMessages) noMessages.remove();
+                
+                chatbox.appendChild(messageElement);
+                scrollToBottom();
+            } else if (data.type === 'typing') {
+                if (data.username !== "{{ request.user.username }}") {
+                    typingIndicator.textContent = `${data.username} is typing...`;
+                    typingIndicator.style.display = 'block';
+                    clearTimeout(typingTimeout);
+                    typingTimeout = setTimeout(() => {
+                        typingIndicator.style.display = 'none';
+                    }, 3000);
+                }
+            }
+        };
+
+        chatSocket.onclose = function(e) {
+            console.error('Chat WebSocket closed unexpectedly for room:', roomSlug, e);
+            chatSocket = null;
+        };
+
+        chatSocket.onerror = function(e) {
+            console.error('Chat WebSocket error for room:', roomSlug, e);
+            chatbox.innerHTML = '<div class="alert alert-danger text-center">Error connecting to chat. Please try again later.</div>';
+            chatSocket = null;
+        };
+    }
+
+    // Send message
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        
+        if (message.length === 0) {
+            alert('Please enter a message before sending');
+            return;
+        }
+        
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                type: "message",
+                message: message,
+                username: "{{ request.user.username }}",
+                room_name: chatRoomName.textContent
+            }));
+            
+            messageInput.value = '';
+            messageInput.focus();
+        } else {
+            console.error('WebSocket is not connected');
+        }
+    }
+
+    // Send typing event
+    function sendTypingEvent() {
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                type: "typing",
+                username: "{{ request.user.username }}",
+            }));
+        }
+    }
+
+    // Form submission handlers
+    messageForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        sendMessage();
+    });
+
+    sendButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        sendMessage();
+    });
+
+    messageInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    // Typing event handler
+    messageInput.addEventListener('input', function() {
+        sendTypingEvent();
+    });
+
+    // Delete chat button handler
+    deleteChatButton.addEventListener('click', function() {
+        if (currentRoomSlug) {
+            deleteMessages(currentRoomSlug);
+        }
+    });
+
+    // Handle room selection
+    function attachRoomLinkListeners() {
+        document.querySelectorAll('.room-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const roomSlug = this.dataset.roomSlug;
+                const roomName = this.dataset.roomName;
+
+                // Update current room
+                if (currentRoomSlug !== roomSlug) {
+                    currentRoomSlug = roomSlug;
+                    chatRoomName.textContent = roomName;
+                    messageForm.style.display = 'flex';
+                    typingIndicator.style.display = 'none';
+                    deleteChatButton.style.display = 'inline-block';
+                    
+                    // Load messages and connect to WebSocket
+                    loadMessages(roomSlug);
+                    connectToRoom(roomSlug, roomName);
+                }
+            });
+        });
+    }
+
+    // Initial attachment of event listeners
+    attachRoomLinkListeners();
+});
+</script>
+{% else %}
+<div class="container">
+    <div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
+        <h5 class="mb-0">You are not logged in</h5>
+        <a href="{% url 'login' %}" class="btn btn-light">
+            <i class="fas fa-sign-in-alt"></i> Log In
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
