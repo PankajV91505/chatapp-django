@@ -332,3 +332,16 @@
         font-size: 0.9rem;
     }
 }
+.search-container {
+    border-bottom: 1px solid #eee;
+    padding: 10px 15px;
+}
+
+#room-search {
+    border-radius: 20px;
+    padding: 8px 15px;
+}
+
+#search-button {
+    border-radius: 0 20px 20px 0;
+}
