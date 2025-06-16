@@ -1,2 +1,26 @@
-venv
-/db.sqlite
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Environment
+.env
+venv/
+env/
+*.env
+
+# VSCode
+.vscode/
+
+# Django
+db.sqlite3
+*.sqlite3
+
+# Migrations (optional)
+**/migrations/*.py
+**/migrations/*.pyc
+
+# Static/media (optional)
+/static/
+/media/
